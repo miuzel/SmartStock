@@ -492,19 +492,15 @@ func loadRefData(mds []Stock, ch chan int) {
 	ch <- 1
 }
 
-func GetCurrentCriteria() string {
+func GetCurrentCriteria() (string, error) {
 	query := "select criteria from criteria limit 1"
 	series, err := c.Query(query)
-
 	if err != nil {
-		Logger.Println("No Criteria")
-		return ""
+		return "", err
 	}
 	if len(series) == 0 {
-		Logger.Println(query + "\nNo Data")
-		return ""
+		return "", errors.New("No Data")
 	}
-
 	columns := series[0].GetColumns()
 	var idxCriteria int
 	for i, _ := range columns {
@@ -517,9 +513,9 @@ func GetCurrentCriteria() string {
 	points := series[0].GetPoints()
 	f, ok := points[0][idxCriteria].(string)
 	if ok {
-		return f
+		return f, nil
 	} else {
-		return ""
+		return "", errors.New("No Data")
 	}
 }
 
@@ -528,10 +524,15 @@ func calcRealTimeMktData(mds []Stock, ch chan int) {
 	lastcriterias := ""
 	newCriteria := false
 	for {
-		criterias := GetCurrentCriteria()
-		if criterias != lastcriterias {
-			lastcriterias = criterias
-			newCriteria = true
+		criterias, err := GetCurrentCriteria()
+		if err != nil {
+			if criterias != lastcriterias {
+				lastcriterias = criterias
+				newCriteria = true
+			}
+		} else {
+			Logger.Println(err)
+			criterias = lastcriterias
 		}
 		for i := range mds {
 			if DEBUGMODE && i >= 2 {
@@ -572,7 +573,8 @@ func HaveAlerts(Idx int, criteriasstring string) bool {
 	var criterias []Criteria = nil
 	criteriaSet := strings.Split(criteriasstring, "|")
 	if len(criteriaSet) == 0 || criteriasstring == "" {
-		criterias = DefaultCriterias
+		criterias = make([]Criteria, len(DefaultCriterias))
+		copy(criterias, DefaultCriterias)
 	} else {
 		criterias = make([]Criteria, len(criteriaSet))
 		for i, s := range criteriaSet {

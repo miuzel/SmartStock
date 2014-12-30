@@ -526,13 +526,13 @@ func calcRealTimeMktData(mds []Stock, ch chan int) {
 	for {
 		criterias, err := GetCurrentCriteria()
 		if err != nil {
+			Logger.Println(err)
+			criterias = lastcriterias
+		} else {
 			if criterias != lastcriterias {
 				lastcriterias = criterias
 				newCriteria = true
 			}
-		} else {
-			Logger.Println(err)
-			criterias = lastcriterias
 		}
 		for i := range mds {
 			if DEBUGMODE && i >= 2 {

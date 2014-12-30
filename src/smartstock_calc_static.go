@@ -215,9 +215,12 @@ func init() {
 	SetProcess(Goproc{loadRefData, "Loading RefData..."})
 	SetProcess(Goproc{calcStaticMktData, "Calculate static results ..."})
 	//DBdropShards([]string{"metrics", "alerts"})
-
+	var err error
+	thecriterias, err = GetCurrentCriteria()
+	if err != nil {
+		Logger.Fatalln(err)
+	}
 	// ignore errors when droping.... TODO: error handling
-	thecriterias = GetCurrentCriteria()
 	//DBdropShards([]string{"metrics"})
 }
 func getRefdataDB(ticker string, Idx int) (Refdata, error) {
@@ -489,19 +492,15 @@ func loadRefData(mds []Stock, ch chan int) {
 	ch <- 1
 }
 
-func GetCurrentCriteria() string {
+func GetCurrentCriteria() (string, error) {
 	query := "select criteria from criteria limit 1"
 	series, err := c.Query(query)
-
 	if err != nil {
-		Logger.Println("No Criteria")
-		return ""
+		return "", err
 	}
 	if len(series) == 0 {
-		Logger.Println(query + "\nNo Data")
-		return ""
+		return "", errors.New("No Data")
 	}
-
 	columns := series[0].GetColumns()
 	var idxCriteria int
 	for i, _ := range columns {
@@ -514,9 +513,9 @@ func GetCurrentCriteria() string {
 	points := series[0].GetPoints()
 	f, ok := points[0][idxCriteria].(string)
 	if ok {
-		return f
+		return f, nil
 	} else {
-		return ""
+		return "", errors.New("No Data")
 	}
 }
 

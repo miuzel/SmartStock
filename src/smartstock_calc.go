@@ -589,7 +589,7 @@ func HaveAlerts(Idx int, criteriasstring string) bool {
 	}
 
 	query := fmt.Sprintf("select dataDate,dataTime,lastPrice,price_change_percentage,volume "+
-		"from mktdata.%s where time > %d order asc", pRef.ticker_exchange, pRef.lasttime)
+		"from mktdata.%s where time >= %d order asc", pRef.ticker_exchange, pRef.lasttime)
 
 	if DEBUGMODE {
 		Logger.Println(query)

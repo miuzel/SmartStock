@@ -63,9 +63,12 @@ type Refdata struct {
 	volSeq        [20]Dec
 	volsum5       Dec
 	volsum10      Dec
+	vollast       Dec
+	vollasthour   Dec
 	prevEMAL      Dec
 	prevEMAS      Dec
 	prevDEA       Dec
+	hourseq       int
 	lastTradeDate string
 	isActive      bool
 	isQualified   bool // some stock has less data than needed
@@ -92,6 +95,7 @@ type Metrics struct {
 	Y2   bool // "Y2", MA5<=MA10<=MA20
 	X3   Dec  // "X3", abs(MACD)
 	X4   Dec  // "X4", tradableQty * Prc
+	Z1   Dec  // "Z1", Volume Ratio 1h
 }
 
 var columns_metrics = [...]string{
@@ -159,6 +163,8 @@ func isHitCriteria(m *Metrics, criteria string) bool {
 			result = result && CompMetricBool(m.Y1, method, value)
 		case "Y2":
 			result = result && CompMetricBool(m.Y2, method, value)
+		case "Z1":
+			result = result && CompMetric(&m.Z1, method, value)
 		default:
 			continue
 		}
@@ -322,7 +328,9 @@ loopval:
 		default:
 		}
 	}
-
+	ref.vollasthour = *New(0)
+	ref.vollast = *New(0)
+	ref.hourseq = 0
 	s, ok := points[0][idxDataDate].(string)
 	if !ok {
 		Logger.Println("invalid date")
@@ -589,7 +597,7 @@ func HaveAlerts(Idx int, criteriasstring string) bool {
 	}
 
 	query := fmt.Sprintf("select dataDate,dataTime,lastPrice,price_change_percentage,volume "+
-		"from mktdata.%s where time >= %d order asc", pRef.ticker_exchange, pRef.lasttime)
+		"from mktdata.%s where time > %d order asc", pRef.ticker_exchange, pRef.lasttime)
 
 	if DEBUGMODE {
 		Logger.Println(query)
@@ -639,6 +647,7 @@ func HaveAlerts(Idx int, criteriasstring string) bool {
 	// Y2       bool   // "Y2", MA5<=MA10<=MA20
 	// X3       Dec    // "X3", abs(MACD)
 	// X4       Dec    // "X4", tradableQty * Prc
+	// Z1       Dec    // "Z1", Volume Ratio 1h
 	TotalMinute := TotalMinute()
 	f, ok := 0.0, true
 	f, ok = points[0][idxtime].(float64)
@@ -658,9 +667,18 @@ loopMktdata:
 		lstprice, _ = p[idxlastPrice].(float64)
 		prcChg, _ = p[idxPriceChgPct].(float64)
 		volDec.SetFloat64(volume)
-		//MinuteFromOpen := getMinuteFromOpen(pRef.dataTime)
 		(*m).X1_1 = calcX1_1(&volDec, &pRef.volsum5, &TotalMinute, &TotalMinute)
 		(*m).X1_2 = calcX1_2(&volDec, &pRef.volsum10, &TotalMinute, &TotalMinute)
+		//Calculate Z1
+		MinuteFromOpen := getMinuteFromOpen(pRef.dataTime)
+		hourseq := (int)(MinuteFromOpen.Float64()) / 60
+		if hourseq > pRef.hourseq {
+			pRef.vollasthour = pRef.vollast
+			pRef.hourseq = hourseq
+		}
+		(*m).Z1 = *new(Dec).Div(new(Dec).Mul(new(Dec).Sub(&volDec, &pRef.vollasthour), New(20)),
+			&pRef.volsum5, 7)
+		pRef.vollast.SetFloat64(volume)
 
 		(*m).X2.SetFloat64(prcChg)
 

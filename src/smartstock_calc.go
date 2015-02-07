@@ -581,6 +581,7 @@ func HaveAlerts(Idx int, criteriasstring string) bool {
 	var criterias []Criteria = nil
 	criteriaSet := strings.Split(criteriasstring, "|")
 	if len(criteriaSet) == 0 || criteriasstring == "" {
+		Logger.Printf("Use Default Criterias:%s\n", DefaultCriterias)
 		criterias = make([]Criteria, len(DefaultCriterias))
 		copy(criterias, DefaultCriterias)
 	} else {
@@ -724,13 +725,15 @@ loopMktdata:
 func genAlert(Idx int, cri *Criteria, m *Metrics, params []string) {
 	var alert Alert
 	alert.criteriaHit = Ref[Idx].shortName + " Hit " + cri.name + ":" + cri.criteria + "\n@" + Ref[Idx].dataTime + "\n"
-	alert.criteriaHit += fmt.Sprintf(" X11:%.2f X12:%.2f X2:%.2f X3:%.3f X4:%.0f Y1:%s Y2:%s ",
+	alert.criteriaHit += fmt.Sprintf(" X11:%.2f X12:%.2f X2:%.2f X3:%.3f X4:%.0f Y1:%s Y2:%s Z1:%.2f",
 		(*m).X1_1.Float64(),
 		(*m).X1_2.Float64(),
 		(*m).X2.Float64(),
 		(*m).X3.Float64(),
 		(*m).X4.Float64(),
-		fmt.Sprint((*m).Y1), fmt.Sprint((*m).Y2))
+		fmt.Sprint((*m).Y1),
+		fmt.Sprint((*m).Y2),
+		(*m).Z1.Float64())
 	alert.criteriaHit += "\n"
 	for i := 0; i+1 < len(params); i += 2 {
 		alert.criteriaHit += fmt.Sprintf(" %s:%s", params[i], params[i+1])

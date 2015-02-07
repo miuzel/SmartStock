@@ -190,6 +190,7 @@ func initDB() {
 		c.CreateShardSpace(DBCONF["database"], &client.ShardSpace{"mktdata", DBCONF["database"], "/mktdata\\..*/", "inf", "7d", 1, 1})
 		c.CreateShardSpace(DBCONF["database"], &client.ShardSpace{"indicators", DBCONF["database"], "/indicators\\..*/", "inf", "10000d", 1, 1})
 		c.CreateShardSpace(DBCONF["database"], &client.ShardSpace{"criteria", DBCONF["database"], "/criter.*/", "inf", "7d", 1, 1})
+		c.CreateShardSpace(DBCONF["database"], &client.ShardSpace{"stock", DBCONF["database"], "/stock.*/", "inf", "7d", 1, 1})
 		//	c.CreateShardSpace(DBCONF["database"], &client.ShardSpace{"default", DBCONF["database"], "/.*/", "inf", "30d", 1, 1})
 	} else {
 		tmp := make(map[string]bool)

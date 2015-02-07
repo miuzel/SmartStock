@@ -559,7 +559,15 @@ func calcRealTimeMktData(mds []Stock, ch chan int) {
 					if HaveAlerts(idx, criterias) {
 						SetStockStatus(idx, STATUS_DONE, pRef.AlertMsg)
 					} else {
-						SetStockStatus(idx, STATUS_READY, "Standby\nLstTime:"+Ref[idx].dataTime)
+						SetStockStatus(idx, STATUS_READY, "Standby\nLstTime:"+Ref[idx].dataTime+fmt.Sprintf(" X11:%.2f X12:%.2f X2:%.2f X3:%.3f X4:%.0f Y1:%s Y2:%s Z1:%.2f",
+							pRef.Metrics.X1_1.Float64(),
+							pRef.Metrics.X1_2.Float64(),
+							pRef.Metrics.X2.Float64(),
+							pRef.Metrics.X3.Float64(),
+							pRef.Metrics.X4.Float64(),
+							fmt.Sprint(pRef.Metrics.Y1),
+							fmt.Sprint(pRef.Metrics.Y2),
+							pRef.Metrics.Z1.Float64()))
 					}
 				}
 			} else {

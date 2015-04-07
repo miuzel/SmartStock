@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
-
 	// "encoding/json"
 	// "errors"
 	. "github.com/dimdin/decimal"
@@ -106,6 +106,7 @@ var columns_metrics = [...]string{
 	"X4",
 }
 var alerttableName = "alerts"
+var calcUser = "user1"
 var DefaultCriterias []Criteria = []Criteria{
 	Criteria{
 		name:     "Default Criteria 1",
@@ -215,11 +216,15 @@ func init() {
 	SetProcess(Goproc{calcRealTimeMktData, "Continuously Monitor the Markets ..."})
 	//DBdropShards([]string{"metrics", "alerts"})
 
-	alerttableName = alerttableName + ".close." + time.Now().String()[:10]
+	alerttableName = alerttableName + ".close." + time.Now().String()[:10] + calcUser
+
+	c.Query("drop series \"" + alerttableName + "\"")
+
 	var err error
 	thecriterias, err = GetCurrentCriteria()
 	if err != nil {
-		Logger.Fatalln(err)
+		Logger.Println(err)
+		thecriterias = ""
 	}
 }
 func getRefdataDB(ticker string, Idx int) (Refdata, error) {
@@ -494,7 +499,7 @@ func loadRefData(mds []Stock, ch chan int) {
 }
 
 func GetCurrentCriteria() (string, error) {
-	query := "select criteria from criteria limit 1"
+	query := "select criteria from criteria." + calcUser + " limit 1"
 	series, err := c.Query(query)
 	if err != nil {
 		return "", err
@@ -833,7 +838,10 @@ func Metrics2Pnts(Idx int, metrics []Metrics) [][]interface{} {
 }
 
 func main() {
+	if len(os.Args) < 2 {
+		Logger.Fatalln("Please input user: \n eg. ./smartstock_calc_close user1\n")
+	}
+	calcUser = os.Args[1]
 
-	c.Query("drop series \"" + alerttableName + "\"")
 	Main()
 }

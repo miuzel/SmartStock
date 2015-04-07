@@ -62,6 +62,7 @@ const (
 var (
 	APICONF         = make(map[string]string)
 	DBCONF          = make(map[string]string)
+	USERCONF        = make(map[string]string)
 	GROUPMOD        = 100
 	DEBUGMODE       = false
 	LOGFILE         = "smart.log"
@@ -292,6 +293,7 @@ func initCfg() {
 	showmonitor, _ = cfg.Bool("GENERAL", "monitor")
 	LOGFILE, _ = cfg.String("LOGGER", "filename")
 
+	USERCONF["users"], _ = cfg.String("USER", "users")
 	APICONF["url"], _ = cfg.String("API", "url")
 	APICONF["market"], _ = cfg.String("API", "market")
 	APICONF["version"], _ = cfg.String("API", "version")

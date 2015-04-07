@@ -72,9 +72,9 @@ type Refdata struct {
 	lastTradeDate string
 	isActive      bool
 	isQualified   bool // some stock has less data than needed
-	isAlertRaised bool
+	isAlertRaised []bool
 	Metrics       Metrics
-	AlertMsg      string
+	AlertMsg      []string
 }
 type Alert struct {
 	criteriaHit string // "criteriaHit"
@@ -86,6 +86,7 @@ var columns_alert = [...]string{
 	"dataTime",
 	"criteriaHit",
 }
+var users []string
 
 type Metrics struct {
 	X1_1 Dec  // "X1-1", Volume Ratio 5d
@@ -222,15 +223,22 @@ func init() {
 	SetProcess(Goproc{loadRefData, "Loading RefData..."})
 	SetProcess(Goproc{calcRealTimeMktData, "Continuously Monitor the Markets ..."})
 	//DBdropShards([]string{"metrics", "alerts"})
+	users = strings.Split(USERCONF["users"], ",")
 
 	alerttableName = alerttableName + "." + time.Now().String()[:10]
 
 	DBdropShards([]string{"metrics"})
+
 }
 func getRefdataDB(ticker string, Idx int) (Refdata, error) {
 	var ref Refdata
 	ref.isQualified = false
-	ref.isAlertRaised = false
+	ref.isAlertRaised = make([]bool, len(users))
+	ref.AlertMsg = make([]string, len(users))
+	for i, _ := range users {
+		ref.isAlertRaised[i] = false
+		ref.AlertMsg[i] = ""
+	}
 	ref.lasttime = 0
 	// ..........m(_._)m
 	datetime, _ := time.Parse("2006-01-02 MST -0700",
@@ -499,9 +507,8 @@ func loadRefData(mds []Stock, ch chan int) {
 	}
 	ch <- 1
 }
-
-func GetCurrentCriteria() (string, error) {
-	query := "select criteria from criteria limit 1"
+func GetCurrentCriteria(user string) (string, error) {
+	query := fmt.Sprintf("select criteria from criteria.%s limit 1", user)
 	series, err := c.Query(query)
 	if err != nil {
 		return "", err
@@ -529,17 +536,26 @@ func GetCurrentCriteria() (string, error) {
 
 func calcRealTimeMktData(mds []Stock, ch chan int) {
 	// c := GetNewDbClient()
-	lastcriterias := ""
-	newCriteria := false
+	lastcriterias := make([]string, len(users))
+	criterias := make([]string, len(users))
+	newCriteria := make([]bool, len(users))
+	for i, _ := range users {
+		lastcriterias[i] = ""
+		criterias[i] = ""
+		newCriteria[i] = false
+	}
 	for {
-		criterias, err := GetCurrentCriteria()
-		if err != nil {
-			Logger.Println(err)
-			criterias = lastcriterias
-		} else {
-			if criterias != lastcriterias {
-				lastcriterias = criterias
-				newCriteria = true
+		for i, user := range users {
+			criteria, err := GetCurrentCriteria(user)
+			if err != nil {
+				//Logger.Println(err)
+				criterias[i] = lastcriterias[i]
+			} else {
+				criterias[i] = criteria
+				if criterias[i] != lastcriterias[i] {
+					lastcriterias[i] = criterias[i]
+					newCriteria[i] = true
+				}
 			}
 		}
 		for i := range mds {
@@ -549,26 +565,26 @@ func calcRealTimeMktData(mds []Stock, ch chan int) {
 			}
 			var idx = mds[i].Idx
 			var pRef = &Ref[idx]
-			if newCriteria {
-				pRef.isAlertRaised = false
-				SetStockStatus(idx, STATUS_READY, "Recalculating...\nLstTime:"+Ref[idx].dataTime)
+			for j := range users {
+				if newCriteria[j] {
+					pRef.isAlertRaised[j] = false
+					SetStockStatus(idx, STATUS_READY, "Recalculating...\nLstTime:"+Ref[idx].dataTime)
+				}
 			}
 			if pRef.isQualified {
-				if !pRef.isAlertRaised {
-					StartProcess(idx)
-					if HaveAlerts(idx, criterias) {
-						SetStockStatus(idx, STATUS_DONE, pRef.AlertMsg)
-					} else {
-						SetStockStatus(idx, STATUS_READY, "Standby\nLstTime:"+Ref[idx].dataTime+fmt.Sprintf(" X11:%.2f X12:%.2f X2:%.2f X3:%.3f X4:%.0f Y1:%s Y2:%s Z1:%.2f",
-							pRef.Metrics.X1_1.Float64(),
-							pRef.Metrics.X1_2.Float64(),
-							pRef.Metrics.X2.Float64(),
-							pRef.Metrics.X3.Float64(),
-							pRef.Metrics.X4.Float64(),
-							fmt.Sprint(pRef.Metrics.Y1),
-							fmt.Sprint(pRef.Metrics.Y2),
-							pRef.Metrics.Z1.Float64()))
-					}
+				StartProcess(idx)
+				if HaveAlerts(idx, criterias) {
+					SetStockStatus(idx, STATUS_DONE, strings.Join(pRef.AlertMsg, "\n"))
+				} else {
+					SetStockStatus(idx, STATUS_READY, "Standby\nLstTime:"+Ref[idx].dataTime+fmt.Sprintf(" X11:%.2f X12:%.2f X2:%.2f X3:%.3f X4:%.0f Y1:%s Y2:%s Z1:%.2f",
+						pRef.Metrics.X1_1.Float64(),
+						pRef.Metrics.X1_2.Float64(),
+						pRef.Metrics.X2.Float64(),
+						pRef.Metrics.X3.Float64(),
+						pRef.Metrics.X4.Float64(),
+						fmt.Sprint(pRef.Metrics.Y1),
+						fmt.Sprint(pRef.Metrics.Y2),
+						pRef.Metrics.Z1.Float64()))
 				}
 			} else {
 				SetStockStatus(idx, STATUS_ERROR, "Not enough data!")
@@ -577,31 +593,35 @@ func calcRealTimeMktData(mds []Stock, ch chan int) {
 		// if DEBUGMODE {
 		// 	break
 		// }
-
 		time.Sleep(1000 * time.Millisecond)
-		newCriteria = false
+		for i, _ := range users {
+			newCriteria[i] = false
+		}
 	}
 	ch <- 1
 }
-func HaveAlerts(Idx int, criteriasstring string) bool {
+func HaveAlerts(Idx int, criteriasstring []string) bool {
 	var pRef = &Ref[Idx]
 	var haveAlerts bool = false
-	var criterias []Criteria = nil
-	criteriaSet := strings.Split(criteriasstring, "|")
-	if len(criteriaSet) == 0 || criteriasstring == "" {
-		Logger.Printf("Use Default Criterias:%s\n", DefaultCriterias)
-		criterias = make([]Criteria, len(DefaultCriterias))
-		copy(criterias, DefaultCriterias)
-	} else {
-		criterias = make([]Criteria, len(criteriaSet))
-		for i, s := range criteriaSet {
-			t := strings.Split(s, ":")
-			criterias[i].desc = t[0]
-			criterias[i].name = t[0]
-			if len(t) < 2 {
-				criterias[i].criteria = ""
+	var criterias [][]Criteria = nil
+	criterias = make([][]Criteria, len(users))
+	for i, _ := range users {
+		criteriaSet := strings.Split(criteriasstring[i], "|")
+		if len(criteriaSet) == 0 || criteriasstring[i] == "" {
+			//Logger.Printf("Use Default Criterias:%s\n", DefaultCriterias)
+			criterias[i] = make([]Criteria, len(DefaultCriterias))
+			copy(criterias[i], DefaultCriterias)
+		} else {
+			criterias[i] = make([]Criteria, len(criteriaSet))
+			for j, s := range criteriaSet {
+				t := strings.Split(s, ":")
+				criterias[i][j].desc = t[0]
+				criterias[i][j].name = t[0]
+				if len(t) < 2 {
+					criterias[i][j].criteria = ""
+				}
+				criterias[i][j].criteria = t[1]
 			}
-			criterias[i].criteria = t[1]
 		}
 	}
 
@@ -707,19 +727,27 @@ loopMktdata:
 		// PutSeries(c, "metrics."+pRef.ticker_exchange, columns_metrics[:],
 		// 	Metrics2Pnts(Idx, []Metrics{pRef.Metrics}))
 
-		for i := range criterias {
-			if isHitCriteria(m, criterias[i].criteria) {
-				genAlert(Idx, &criterias[i], m,
-					[]string{
-						"Prc", prcDec.Round(3).String(),
-						"Vol", volDec.Round(0).String(),
-						"MA5", MA5.Round(3).String(),
-						"MA10", MA10.Round(3).String(),
-						"MA20", MA20.Round(3).String()})
-				haveAlerts = true
-				pRef.isAlertRaised = true
-				break loopMktdata
+		for i, criteriaone := range criterias {
+			if !pRef.isAlertRaised[i] {
+				for j, _ := range criteriaone {
+					if isHitCriteria(m, criteriaone[j].criteria) {
+						genAlert(Idx, &criteriaone[j], m,
+							[]string{
+								"Prc", prcDec.Round(3).String(),
+								"Vol", volDec.Round(0).String(),
+								"MA5", MA5.Round(3).String(),
+								"MA10", MA10.Round(3).String(),
+								"MA20", MA20.Round(3).String()}, i)
+						haveAlerts = true
+						pRef.isAlertRaised[i] = true
+					}
+				}
+
 			}
+		}
+		if haveAlerts {
+
+			break loopMktdata
 		}
 	}
 	f, ok = points[len(points)-1][idxtime].(float64)
@@ -730,7 +758,7 @@ loopMktdata:
 	return haveAlerts
 }
 
-func genAlert(Idx int, cri *Criteria, m *Metrics, params []string) {
+func genAlert(Idx int, cri *Criteria, m *Metrics, params []string, userIdx int) {
 	var alert Alert
 	alert.criteriaHit = Ref[Idx].shortName + " Hit " + cri.name + ":" + cri.criteria + "\n@" + Ref[Idx].dataTime + "\n"
 	alert.criteriaHit += fmt.Sprintf(" X11:%.2f X12:%.2f X2:%.2f X3:%.3f X4:%.0f Y1:%s Y2:%s Z1:%.2f",
@@ -746,9 +774,9 @@ func genAlert(Idx int, cri *Criteria, m *Metrics, params []string) {
 	for i := 0; i+1 < len(params); i += 2 {
 		alert.criteriaHit += fmt.Sprintf(" %s:%s", params[i], params[i+1])
 	}
-	Ref[Idx].AlertMsg = alert.criteriaHit
+	Ref[Idx].AlertMsg[userIdx] = alert.criteriaHit
 
-	PutSeries(c, alerttableName, columns_alert[:], Alert2Pnts(Idx, []Alert{alert}))
+	PutSeries(c, alerttableName+"."+users[userIdx], columns_alert[:], Alert2Pnts(Idx, []Alert{alert}))
 }
 
 func calcX1_1(volume, volsum5, MinuteFromOpen, TotalMinute *Dec) Dec {

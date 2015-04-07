@@ -108,6 +108,7 @@ var columns_metrics = [...]string{
 }
 var alerttableName = "alerts"
 var calcDate = "2014-12-01"
+var calcUser = "user1"
 var c = GetNewDbClient()
 var DefaultCriterias []Criteria = []Criteria{
 	Criteria{
@@ -212,13 +213,14 @@ func CompMetricBool(metric bool, method string, value string) bool {
 func init() {
 	Ref = make([]Refdata, STOCKCOUNT)
 
-	SetProcess(Goproc{loadRefData, "Loading RefData..."})
+	SetProcess(Goproc{loadRefData, "Loading RefData..." + calcUser})
 	SetProcess(Goproc{calcStaticMktData, "Calculate static results ..."})
 	//DBdropShards([]string{"metrics", "alerts"})
 	var err error
 	thecriterias, err = GetCurrentCriteria()
 	if err != nil {
-		Logger.Fatalln(err)
+		Logger.Println(err)
+		thecriterias = ""
 	}
 	// ignore errors when droping.... TODO: error handling
 	//DBdropShards([]string{"metrics"})
@@ -493,7 +495,7 @@ func loadRefData(mds []Stock, ch chan int) {
 }
 
 func GetCurrentCriteria() (string, error) {
-	query := "select criteria from criteria limit 1"
+	query := "select criteria from criteria." + calcUser + " limit 1"
 	series, err := c.Query(query)
 	if err != nil {
 		return "", err
@@ -813,11 +815,12 @@ func Metrics2Pnts(Idx int, metrics []Metrics) [][]interface{} {
 }
 
 func main() {
-	if len(os.Args) < 2 {
+	if len(os.Args) < 3 {
 		Logger.Fatalln("Please input calculation date: \n eg. ./smartstock_calc_static 2014-04-01\n")
 	}
 	calcDate = os.Args[1]
-	alerttableName = alerttableName + "." + calcDate
+	calcUser = os.Args[2]
+	alerttableName = alerttableName + "." + calcDate + "." + calcUser
 	c.Query("drop series \"" + alerttableName + "\"")
 	Main()
 }

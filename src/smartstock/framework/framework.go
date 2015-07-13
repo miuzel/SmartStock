@@ -106,7 +106,10 @@ func DBdropShards(shardsToDrop []string) {
 	}
 }
 func CalcPercentage(v1, v2 Dec, scale uint8) Dec {
-	//TODO: zerodiv here
+	// zerodiv here
+	if v2.Cmp(New(0)) == 0 {
+        return New(0)
+	}
 	pct := *new(Dec).Div(&v1, &v2, scale)
 	pct = *new(Dec).Mul(&pct, New(100))
 	pct.Round(DECIMAL_PCT)
